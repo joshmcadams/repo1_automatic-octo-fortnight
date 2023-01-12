@@ -5,6 +5,8 @@
 # -----------------------------
 # Imports
 # -----------------------------
+from zoom import Zoom
+
 from typing import Dict, Any
 
 import requests
@@ -14,6 +16,7 @@ import re
 import csv
 # import datetime
 from datetime import datetime
+from datetime import date
 from datetime import timedelta
 import time
 # import os.path
@@ -32,6 +35,15 @@ sleep_2 = 2  # Inner sleep
 # -----------------------------
 
 from lifering_secrets import *
+
+# date_name = "{:04d}".format(year) + '-' + "{:02d}".format(month) + '-' + "{:02d}".format(day)
+def run():
+    yesterday = date.today() - timedelta(days=3)
+    # print(yesterday.isoformat())
+    print(Zoom(headers['authorization'][7:]).get_meetings(yesterday))
+
+
+run()
 
 # -----------------------------
 
@@ -67,9 +79,9 @@ event_header_file_prefix = 'lifering_zoom_event_header'
 event_file_suffix = file_suffix
 
 # The range of months for the given year
-year = 2022
+year = 2023
 month_start = 1
-month_end = 13
+month_end = 2
 
 
 # -----------------------------
@@ -148,142 +160,143 @@ def write_files(infix, event_data_dict_p, participant_clean_data_dict_p):
 
 # This is to enable exiting early after all the days are exhausted (assuming all days have some kind of meeting)
 # Can be disabled near the 'break' and would simply not write files for days that have no data
-found_any_data = False
-for month in range(month_start, month_end):
-    for day in range(1, 32):  
-        date_name = "{:04d}".format(year) + '-' + "{:02d}".format(month) + '-' + "{:02d}".format(day)
-        try:
-            date_dt = datetime.strptime(date_name, date_format)
-        except ValueError:
-            print("Skipping: " + str(date_name))
-            continue
+def go():
+    found_any_data = False
+    for month in range(month_start, month_end):
+        for day in range(1, 32):  
+            date_name = "{:04d}".format(year) + '-' + "{:02d}".format(month) + '-' + "{:02d}".format(day)
+            try:
+                date_dt = datetime.strptime(date_name, date_format)
+            except ValueError:
+                print("Skipping: " + str(date_name))
+                continue
 
-        data_file_date_name = data_file_prefix + '_' + date_name + data_file_suffix
-        event_file_date_name = event_file_prefix + '_' + date_name + event_file_suffix
+            data_file_date_name = data_file_prefix + '_' + date_name + data_file_suffix
+            event_file_date_name = event_file_prefix + '_' + date_name + event_file_suffix
 
-        participant_data_date_dict = {}
-        participant_clean_data_date_dict = {}
+            participant_data_date_dict = {}
+            participant_clean_data_date_dict = {}
 
-        event_data_date_dict = {}
+            event_data_date_dict = {}
 
-        # print ('Data file: '+data_file_date_name)
-        if path.exists(data_file_date_name):
-            print('File exists: ' + data_file_date_name)
-            continue
+            # print ('Data file: '+data_file_date_name)
+            if path.exists(data_file_date_name):
+                print('File exists: ' + data_file_date_name)
+                continue
 
-        URL = 'https://api.zoom.us/v2/metrics/meetings?type=past&from=' + date_name + '&to=' + date_name
-        print(URL)
-        # URL = 'https://api.zoom.us/v2/metrics/meetings?type=past&from=2021-06-01'+str(day)+'to=2021-06-30'+str(day+1)
-        time.sleep(sleep_1)
+            URL = 'https://api.zoom.us/v2/metrics/meetings?type=past&from=' + date_name + '&to=' + date_name
+            print(URL)
+            # URL = 'https://api.zoom.us/v2/metrics/meetings?type=past&from=2021-06-01'+str(day)+'to=2021-06-30'+str(day+1)
+            time.sleep(sleep_1)
 
-        page = requests.get(URL, headers=headers)
-        # print(page)
+            page = requests.get(URL, headers=headers)
+            # print(page)
 
-        soup = BeautifulSoup(page.content, 'html.parser')
-        print(soup)
+            soup = BeautifulSoup(page.content, 'html.parser')
+            print(soup)
 
-        site_json = json.loads(soup.text)
-        # print(site_json)
-        found_data = False
-        day_from = site_json['from']
-        day_to = site_json['to']
-        if day_from == date_name:
-            for meeting in site_json['meetings']:
-                found_data = True
-                uuid = meeting.get('uuid')
-                # print(meeting)
-                event_data_dict[uuid] = meeting
-                event_data_date_dict[uuid] = meeting
-                uuid_encode = str(uuid)
-                if uuid_encode[0] == "/":
-                    uuid_encode = quote(quote(uuid_encode, safe=''), safe='')
+            site_json = json.loads(soup.text)
+            # print(site_json)
+            found_data = False
+            day_from = site_json['from']
+            day_to = site_json['to']
+            if day_from == date_name:
+                for meeting in site_json['meetings']:
+                    found_data = True
+                    uuid = meeting.get('uuid')
+                    # print(meeting)
+                    event_data_dict[uuid] = meeting
+                    event_data_date_dict[uuid] = meeting
+                    uuid_encode = str(uuid)
+                    if uuid_encode[0] == "/":
+                        uuid_encode = quote(quote(uuid_encode, safe=''), safe='')
 
-                URL2 = 'https://api.zoom.us/v2/metrics/meetings/' + uuid_encode + '/participants?type=past' + page_size  # +'&from='+date_name+'&to='+date_name
-                print(URL2)
-                time.sleep(sleep_2)
+                    URL2 = 'https://api.zoom.us/v2/metrics/meetings/' + uuid_encode + '/participants?type=past' + page_size  # +'&from='+date_name+'&to='+date_name
+                    print(URL2)
+                    time.sleep(sleep_2)
 
-                meeting_page = requests.get(URL2, headers=headers)
-                if meeting_page.status_code == 404:
-                    print('Not Found.')
-                elif meeting_page.status_code == 200:
-                    soup = BeautifulSoup(meeting_page.content, 'html.parser')
-                    # print(meeting_page)
-                    # print(soup)
+                    meeting_page = requests.get(URL2, headers=headers)
+                    if meeting_page.status_code == 404:
+                        print('Not Found.')
+                    elif meeting_page.status_code == 200:
+                        soup = BeautifulSoup(meeting_page.content, 'html.parser')
+                        # print(meeting_page)
+                        # print(soup)
 
-                    meeting_json = json.loads(soup.text)
-                    previous_leave_time='2021-01-01T00:00:00Z'
-                    for participant in meeting_json['participants']:
-                        print(participant)
-                        user_name = participant.get('user_name')
-                        join_time = participant.get('join_time')  # 2021-06-23T22:49:42Z	2021-06-23T23:59:17Z
-                        leave_time = participant.get('leave_time')
-                        if leave_time is None:
-                            leave_time = previous_leave_time
-                        previous_leave_time = leave_time
-                        ip_address = participant.get('ip_address')
+                        meeting_json = json.loads(soup.text)
+                        previous_leave_time='2021-01-01T00:00:00Z'
+                        for participant in meeting_json['participants']:
+                            print(participant)
+                            user_name = participant.get('user_name')
+                            join_time = participant.get('join_time')  # 2021-06-23T22:49:42Z	2021-06-23T23:59:17Z
+                            leave_time = participant.get('leave_time')
+                            if leave_time is None:
+                                leave_time = previous_leave_time
+                            previous_leave_time = leave_time
+                            ip_address = participant.get('ip_address')
 
-                        # -----------------------------------------------------------
+                            # -----------------------------------------------------------
 
-                        join_dt = datetime.strptime(join_time, datetime_format)
-                        leave_dt = datetime.strptime(leave_time, datetime_format)
-                        duration_delta = leave_dt - join_dt
-                        if duration_delta < is_present_delta:
-                            print("Ignored: " + user_name + " in: " + uuid + " delta: " + str(duration_delta))
-                            continue
-                        else:
-                            print("Added:   " + user_name + " in: " + uuid + " delta: " + str(duration_delta))
+                            join_dt = datetime.strptime(join_time, datetime_format)
+                            leave_dt = datetime.strptime(leave_time, datetime_format)
+                            duration_delta = leave_dt - join_dt
+                            if duration_delta < is_present_delta:
+                                print("Ignored: " + user_name + " in: " + uuid + " delta: " + str(duration_delta))
+                                continue
+                            else:
+                                print("Added:   " + user_name + " in: " + uuid + " delta: " + str(duration_delta))
 
-                        clean_name = user_name
-                        clean_name = re.sub(regex_whitelist, '', clean_name).strip()
-                        spaces = [m.start() for m in re.finditer(r" ", clean_name)]
-                        if len(spaces) > 1:
-                            clean_name = clean_name[:spaces[1]]
-                        parens = [m.start() for m in re.finditer(r"\(", clean_name)]
-                        if len(parens) > 0:
-                            clean_name = clean_name[:parens[0]]
-                        clean_name = re.sub(' ', '', clean_name).lower()
+                            clean_name = user_name
+                            clean_name = re.sub(regex_whitelist, '', clean_name).strip()
+                            spaces = [m.start() for m in re.finditer(r" ", clean_name)]
+                            if len(spaces) > 1:
+                                clean_name = clean_name[:spaces[1]]
+                            parens = [m.start() for m in re.finditer(r"\(", clean_name)]
+                            if len(parens) > 0:
+                                clean_name = clean_name[:parens[0]]
+                            clean_name = re.sub(' ', '', clean_name).lower()
 
-                        data = {'user_name': user_name, 'clean_name': clean_name, 'ip_address': ip_address, 'uuid': uuid,
-                                'join_time': join_time, 'leave_time': leave_time}
-                        # print ('user_name: {}, spaces: {}, clean_name: {}'.format(user_name, spaces, clean_name))
+                            data = {'user_name': user_name, 'clean_name': clean_name, 'ip_address': ip_address, 'uuid': uuid,
+                                    'join_time': join_time, 'leave_time': leave_time}
+                            # print ('user_name: {}, spaces: {}, clean_name: {}'.format(user_name, spaces, clean_name))
 
-                        # -----------------------------------------------------------
+                            # -----------------------------------------------------------
 
-                        participant_data = participant_data_dict.get(user_name, {'user_name': user_name, 'meetings': []})
-                        participant_data_dict[user_name] = participant_data
-                        participant_data['meetings'].append(data)
-                        # print(participant_data)
+                            participant_data = participant_data_dict.get(user_name, {'user_name': user_name, 'meetings': []})
+                            participant_data_dict[user_name] = participant_data
+                            participant_data['meetings'].append(data)
+                            # print(participant_data)
 
-                        participant_data_date = participant_data_date_dict.get(user_name,
-                                                                               {'user_name': user_name, 'meetings': []})
-                        participant_data_date_dict[user_name] = participant_data_date
-                        participant_data_date['meetings'].append(data)
+                            participant_data_date = participant_data_date_dict.get(user_name,
+                                                                                {'user_name': user_name, 'meetings': []})
+                            participant_data_date_dict[user_name] = participant_data_date
+                            participant_data_date['meetings'].append(data)
 
-                        participant_clean_data = participant_clean_data_dict.get(clean_name,
-                                                                                 {'clean_name': clean_name, 'meetings': []})
-                        participant_clean_data_dict[clean_name] = participant_clean_data
-                        participant_clean_data['meetings'].append(data)
-                        # print(participant_clean_data)
+                            participant_clean_data = participant_clean_data_dict.get(clean_name,
+                                                                                    {'clean_name': clean_name, 'meetings': []})
+                            participant_clean_data_dict[clean_name] = participant_clean_data
+                            participant_clean_data['meetings'].append(data)
+                            # print(participant_clean_data)
 
-                        participant_clean_data_date = participant_clean_data_date_dict.get(clean_name,
-                                                                                           {'clean_name': clean_name,
-                                                                                            'meetings': []})
-                        participant_clean_data_date_dict[clean_name] = participant_clean_data_date
-                        participant_clean_data_date['meetings'].append(data)
-                    print('Leave')
-                print('Leave2')
-        else:
-            print('Date is wrong: ' + day_from + ' <> '+date_name)
-            break
+                            participant_clean_data_date = participant_clean_data_date_dict.get(clean_name,
+                                                                                            {'clean_name': clean_name,
+                                                                                                'meetings': []})
+                            participant_clean_data_date_dict[clean_name] = participant_clean_data_date
+                            participant_clean_data_date['meetings'].append(data)
+                        print('Leave')
+                    print('Leave2')
+            else:
+                print('Date is wrong: ' + day_from + ' <> '+date_name)
+                break
 
-        if found_data or not found_any_data:
-            print(participant_data_date_dict)
-            write_files('_' + date_name, event_data_date_dict, participant_clean_data_date_dict)
-            found_any_data = found_data
-        else:
-            print('Date is after end of data: ' + date_name)
-            break
+            if found_data or not found_any_data:
+                print(participant_data_date_dict)
+                write_files('_' + date_name, event_data_date_dict, participant_clean_data_date_dict)
+                found_any_data = found_data
+            else:
+                print('Date is after end of data: ' + date_name)
+                break
 
-write_files('_processed', event_data_dict, participant_clean_data_dict)
+    write_files('_processed', event_data_dict, participant_clean_data_dict)
 
-# ===============================================================================================
+    # ===============================================================================================
