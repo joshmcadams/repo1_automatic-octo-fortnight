@@ -40,7 +40,10 @@ from lifering_secrets import *
 def run():
     yesterday = date.today() - timedelta(days=3)
     # print(yesterday.isoformat())
-    print(Zoom(headers['authorization'][7:]).get_meetings(yesterday))
+    token = headers['authorization'][7:]
+    meetings = Zoom(token).get_meetings(yesterday)
+    for meeting in meetings:
+        meeting.get_participants()
 
 
 run()
